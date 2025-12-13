@@ -16,8 +16,11 @@ To get real data, you need free API keys from the services we use.
 - **VirusTotal**: [Sign up here](https://www.virustotal.com/gui/join-us), click your profile icon -> API Key.
 
 ### 2. Configure the App
-1. Open the file named `.env.local` in this folder.
-2. Paste your API keys after the equals signs:
+1. Make a copy of `.env.example` and name it `.env.local`:
+   ```bash
+   cp .env.example .env.local
+   ```
+2. Open `.env.local` and paste your API keys after the equals signs:
    ```env
    ABUSEIPDB_API_KEY=your_long_key_here
    VIRUSTOTAL_API_KEY=your_long_key_here
