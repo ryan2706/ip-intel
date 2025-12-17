@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   build:
     name: Build and Scan
@@ -14,12 +18,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 1. Build the Docker image (so Trivy has something to scan)
       - name: Build an image from Dockerfile
         run: |
           docker build -t my-app:${{ github.sha }} .
 
-      # 2. Run Trivy Vulnerability Scanner
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -28,7 +30,6 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
 
-      # 3. Upload the results to GitHub's Security Tab
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
