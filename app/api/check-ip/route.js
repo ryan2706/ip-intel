@@ -1,34 +1,41 @@
 import { NextResponse } from 'next/server';
 
-export async function GET(request) {
-    const { searchParams } = new URL(request.url);
-    const ip = searchParams.get('ip');
+const abuseIpDbApiKey = process.env.ABUSEIPDB_API_KEY;
+const virusTotalApiKey = process.env.VIRUSTOTAL_API_KEY;
 
-    if (!ip) {
-        return NextResponse.json({ error: 'IP address is required' }, { status: 400 });
-    }
-
-    // Basic IP validation
-    const ipRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
-    if (!ipRegex.test(ip)) {
-        return NextResponse.json({ error: 'Invalid IP address format' }, { status: 400 });
-    }
-
-    const abuseIpDbApiKey = process.env.ABUSEIPDB_API_KEY;
-    const virusTotalApiKey = process.env.VIRUSTOTAL_API_KEY;
-
-    if (!abuseIpDbApiKey || !virusTotalApiKey) {
-        console.warn('Missing API Keys');
-        // Proceeding but warning - for dev check. 
-        // In prod we might want to error, but for now we try what we can.
-    }
-
+// Helper function to check a single IP
+async function checkIp(ip) {
     const results = {
         ip,
         abuseIpDb: null,
         virusTotal: null,
+        ipApi: null,
         errors: [],
     };
+
+    // Basic IP validation
+    const ipRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
+    if (!ipRegex.test(ip)) {
+        results.errors.push('Invalid IP address format');
+        return results;
+    }
+
+    if (!abuseIpDbApiKey || !virusTotalApiKey) {
+        // Proceeding without keys will result in limited/no data from those specific sources
+    }
+
+    // IP-API.com (Free tier: 45 req/min, HTTP only usually)
+    try {
+        const ipApiRes = await fetch(`http://ip-api.com/json/${ip}`);
+        if (ipApiRes.ok) {
+            results.ipApi = await ipApiRes.json();
+        } else {
+            // Non-critical, just log or ignore
+            results.errors.push(`IP-API Error: ${ipApiRes.status}`);
+        }
+    } catch (error) {
+        results.errors.push(`IP-API Exception: ${error.message}`);
+    }
 
     try {
         if (abuseIpDbApiKey) {
@@ -65,5 +72,37 @@ export async function GET(request) {
         results.errors.push(`VirusTotal Exception: ${error.message}`);
     }
 
-    return NextResponse.json(results);
+    return results;
+}
+
+export async function GET(request) {
+    const { searchParams } = new URL(request.url);
+    const ip = searchParams.get('ip');
+
+    if (!ip) {
+        return NextResponse.json({ error: 'IP address is required' }, { status: 400 });
+    }
+
+    const result = await checkIp(ip);
+    return NextResponse.json(result);
+}
+
+export async function POST(request) {
+    try {
+        const body = await request.json();
+        const { ips } = body;
+
+        if (!ips || !Array.isArray(ips) || ips.length === 0) {
+            return NextResponse.json({ error: 'List of IPs is required' }, { status: 400 });
+        }
+
+        // Process IPs in parallel
+        // Note: Real-world large batches might need rate limiting/queuing.
+        const promises = ips.map(ip => checkIp(ip));
+        const results = await Promise.all(promises);
+
+        return NextResponse.json(results);
+    } catch (error) {
+        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
 }
